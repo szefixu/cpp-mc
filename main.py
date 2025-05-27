@@ -4,6 +4,7 @@ from OpenGL.GL import *
 from OpenGL.GLU import *
 import math
 from enum import Enum
+import numpy as np
 
 # Block Types Enum
 class BlockType(Enum):
@@ -133,9 +134,9 @@ def get_targeted_block(camera_pos, yaw, pitch, max_distance=5.0, step_size=0.05)
     dx = -math.sin(rad_yaw) * math.cos(rad_pitch); dy = math.sin(rad_pitch); dz = -math.cos(rad_yaw) * math.cos(rad_pitch)
     current_pos = list(camera_pos)
     for _ in range(int(max_distance / step_size)):
-        prev = (round(current_pos[0]), round(current_pos[1]), round(current_pos[2]))
+        prev = (int(current_pos[0] + 0.5), int(current_pos[1] + 0.5), int(current_pos[2] + 0.5))
         current_pos[0] += dx*step_size; current_pos[1] += dy*step_size; current_pos[2] += dz*step_size
-        bx, by, bz = round(current_pos[0]), round(current_pos[1]), round(current_pos[2])
+        bx, by, bz = int(current_pos[0] + 0.5), int(current_pos[1] + 0.5), int(current_pos[2] + 0.5)
         if not (0<=bx<WORLD_WIDTH and 0<=by<WORLD_HEIGHT and 0<=bz<WORLD_DEPTH): continue
         if world_data[bx][by][bz] != BlockType.EMPTY.value:
             if prev and (0<=prev[0]<WORLD_WIDTH and 0<=prev[1]<WORLD_HEIGHT and 0<=prev[2]<WORLD_DEPTH):
@@ -163,9 +164,66 @@ def text_to_texture(text, font, color=(255, 255, 255)):
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, text_data)
     return tex_id, width, height
 
-def draw_cube_at(pos_x, pos_y, pos_z, texture_id_to_apply):
+def get_frustum_planes():
+    # PyOpenGL often returns matrices as flat arrays; reshape if necessary.
+    # Matrices are typically column-major in OpenGL.
+    
+    # Get ModelView and Projection matrices
+    mvm = np.array(glGetDoublev(GL_MODELVIEW_MATRIX)).reshape(4,4, order='F') # Fortran order for column-major
+    pm = np.array(glGetDoublev(GL_PROJECTION_MATRIX)).reshape(4,4, order='F')  # Fortran order for column-major
+    
+    # Compute the clip matrix (Projection * ModelView)
+    clip_matrix_col_major = np.dot(pm, mvm) 
+    # Transpose to row-major for easier plane extraction, where each row is a plane (a,b,c,d)
+    clip_matrix = clip_matrix_col_major.T 
+
+    planes = []
+    # Left plane:    clip_row_3 + clip_row_0
+    planes.append(clip_matrix[3] + clip_matrix[0])
+    # Right plane:   clip_row_3 - clip_row_0
+    planes.append(clip_matrix[3] - clip_matrix[0])
+    # Bottom plane:  clip_row_3 + clip_row_1
+    planes.append(clip_matrix[3] + clip_matrix[1])
+    # Top plane:     clip_row_3 - clip_row_1
+    planes.append(clip_matrix[3] - clip_matrix[1])
+    # Near plane:    clip_row_3 + clip_row_2
+    planes.append(clip_matrix[3] + clip_matrix[2])
+    # Far plane:     clip_row_3 - clip_row_2
+    planes.append(clip_matrix[3] - clip_matrix[2])
+
+    normalized_planes = []
+    for plane in planes:
+        # Normalize the plane: (a,b,c,d) / sqrt(a^2+b^2+c^2)
+        magnitude = np.sqrt(plane[0]**2 + plane[1]**2 + plane[2]**2)
+        if magnitude == 0: # Avoid division by zero, though unlikely with valid matrices
+            normalized_planes.append(plane) # Should not happen
+            continue
+        normalized_planes.append(plane / magnitude)
+    return normalized_planes
+
+def is_block_in_frustum(block_world_x, block_world_y, block_world_z, frustum_planes):
+    # Block center is (block_world_x, block_world_y, block_world_z)
+    # Block half-extent (radius of sorts for AABB check)
+    half_extent = 0.5 
+    for plane in frustum_planes:
+        nx, ny, nz, d_plane = plane[0], plane[1], plane[2], plane[3]
+        
+        # Calculate effective radius of AABB projected onto plane normal
+        # This is sum of projections of half-extents onto the normal's axes
+        r_eff = half_extent * (abs(nx) + abs(ny) + abs(nz))
+        
+        # Calculate distance from cube center to plane
+        dist_center_to_plane = nx * block_world_x + ny * block_world_y + nz * block_world_z + d_plane
+        
+        # If distance is less than negative effective radius, cube is entirely outside this plane
+        if dist_center_to_plane < -r_eff:
+            return False # Cube is entirely outside this plane (on the "negative" side)
+            
+    return True # Cube is not entirely outside any plane (it's visible or intersecting)
+
+def draw_cube_at(pos_x, pos_y, pos_z, current_block_texture_id):
     glPushMatrix(); glTranslatef(float(pos_x), float(pos_y), float(pos_z))
-    if texture_id_to_apply: glBindTexture(GL_TEXTURE_2D, texture_id_to_apply); glEnable(GL_TEXTURE_2D)
+    if current_block_texture_id: glBindTexture(GL_TEXTURE_2D, current_block_texture_id); glEnable(GL_TEXTURE_2D)
     else: glDisable(GL_TEXTURE_2D)
 
     # --- AO Calculation Start (Temporarily Bypassed) ---
@@ -195,7 +253,7 @@ def draw_cube_at(pos_x, pos_y, pos_z, texture_id_to_apply):
             glVertex3fv(std_cube_vertices[vertex_index])
         glEnd()
 
-    if texture_id_to_apply: glBindTexture(GL_TEXTURE_2D, 0)
+    if current_block_texture_id: glBindTexture(GL_TEXTURE_2D, 0) # Unbind only if a texture was bound
     glPopMatrix()
 
 def draw_wireframe_cube_at(pos_x, pos_y, pos_z):
@@ -232,9 +290,47 @@ def draw_hotbar(screen_width, screen_height, font, hotbar_slots_types, player_in
             glLineWidth(1.0)
     glEnable(GL_DEPTH_TEST); glEnable(GL_CULL_FACE); glMatrixMode(GL_PROJECTION); glPopMatrix(); glMatrixMode(GL_MODELVIEW); glPopMatrix(); glDisable(GL_BLEND)
 
+def draw_fps_counter(fps_value, font, screen_width, screen_height):
+    fps_text = f"FPS: {fps_value:.0f}"
+    fps_tex_id, fps_tex_w, fps_tex_h = text_to_texture(fps_text, font, color=(255, 255, 0)) # Yellow color
+
+    glMatrixMode(GL_PROJECTION)
+    glPushMatrix()
+    glLoadIdentity()
+    gluOrtho2D(0, screen_width, 0, screen_height)
+    glMatrixMode(GL_MODELVIEW)
+    glPushMatrix()
+    glLoadIdentity()
+
+    glDisable(GL_DEPTH_TEST)
+    glEnable(GL_BLEND)
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
+
+    glEnable(GL_TEXTURE_2D)
+    glBindTexture(GL_TEXTURE_2D, fps_tex_id)
+
+    x_pos = 10
+    y_pos = screen_height - fps_tex_h - 10
+    glBegin(GL_QUADS)
+    glTexCoord2f(0, 0); glVertex2f(x_pos, y_pos)
+    glTexCoord2f(1, 0); glVertex2f(x_pos + fps_tex_w, y_pos)
+    glTexCoord2f(1, 1); glVertex2f(x_pos + fps_tex_w, y_pos + fps_tex_h)
+    glTexCoord2f(0, 1); glVertex2f(x_pos, y_pos + fps_tex_h)
+    glEnd()
+
+    glDisable(GL_TEXTURE_2D)
+    glDeleteTextures(1, [fps_tex_id]) # Delete texture as it's recreated each frame
+    glDisable(GL_BLEND)
+    glEnable(GL_DEPTH_TEST)
+    glMatrixMode(GL_PROJECTION)
+    glPopMatrix()
+    glMatrixMode(GL_MODELVIEW)
+    glPopMatrix()
+
 def main():
     global world_data, current_selected_block_type 
     pygame.init(); pygame.font.init() 
+    clock = pygame.time.Clock() # Initialize Pygame Clock
     ui_font = pygame.font.Font(None, 24) 
     display_width, display_height = 800, 600
     pygame.display.set_mode((display_width, display_height), DOUBLEBUF | OPENGL)
@@ -256,7 +352,23 @@ def main():
     world_data[4][1][4]=BlockType.STONE.value; world_data[4][3][4]=BlockType.STONE.value
     world_data[4][2][3]=BlockType.STONE.value; world_data[4][2][5]=BlockType.STONE.value
 
-    texture_id = load_texture("placeholder_texture.png")
+    block_texture_ids = {}
+    textures_to_load = [
+        (BlockType.GRASS, "textures/grass.png"),
+        (BlockType.DIRT, "textures/dirt.png"),
+        (BlockType.STONE, "textures/stone.png"),
+        (BlockType.WOOD, "textures/wood.png"),
+        (BlockType.LEAVES, "textures/leaves.png")
+    ]
+    for block_type_enum, texture_path in textures_to_load:
+        tex_id = load_texture(texture_path)
+        if tex_id is not None:
+            block_texture_ids[block_type_enum] = tex_id
+        else:
+            print(f"Failed to load texture for {block_type_enum.name} from {texture_path}")
+            # Optionally, assign a default placeholder or handle error
+            # For now, blocks of this type might not render with texture
+
     glMatrixMode(GL_PROJECTION); gluPerspective(45, (display_width/display_height), 0.1, 100.0); glMatrixMode(GL_MODELVIEW)
     camera_pos = [WORLD_WIDTH/2.0, ground_level + PLAYER_AABB_DIMS[1]/2.0 + 2.1, WORLD_DEPTH/2.0] 
     camera_yaw, camera_pitch = 0.0, -30.0 
@@ -272,7 +384,7 @@ def main():
                 dx,dy=event.rel
                 camera_yaw += dx * mouse_sensitivity
                 camera_yaw %= 360.0 # Wrap yaw
-                camera_pitch -= dy * mouse_sensitivity
+                camera_pitch += dy * mouse_sensitivity
                 camera_pitch = max(-90.0, min(90.0, camera_pitch)) # Clamp pitch
             if event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE: running = False
@@ -317,16 +429,37 @@ def main():
         camera_pos=anp_
             
         glLoadIdentity(); glRotatef(camera_pitch,1,0,0); glRotatef(camera_yaw,0,1,0); glTranslatef(-camera_pos[0],-camera_pos[1],-camera_pos[2])
+        
+        # Get frustum planes for culling
+        frustum_planes = get_frustum_planes()
+        
         glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT)
         for x in range(WORLD_WIDTH):
             for y in range(WORLD_HEIGHT):
                 for z in range(WORLD_DEPTH):
-                    if world_data[x][y][z]!=BlockType.EMPTY.value: draw_cube_at(x,y,z,texture_id)
+                    block_type_value = world_data[x][y][z]
+                    if block_type_value != BlockType.EMPTY.value:
+                        # Perform frustum culling check before drawing
+                        if is_block_in_frustum(x, y, z, frustum_planes):
+                            current_block_type_enum = BlockType(block_type_value)
+                            texture_id_for_block = block_texture_ids.get(current_block_type_enum)
+                            # Call draw_cube_at with the specific texture ID
+                            draw_cube_at(x, y, z, texture_id_for_block)
         if targeted_block_info and targeted_block_info[0]: draw_wireframe_cube_at(*targeted_block_info[0])
         draw_hotbar(display_width,display_height,ui_font,hotbar_slots,player_inventory,current_hotbar_selection_index)
-        pygame.display.flip(); pygame.time.wait(10)
+        
+        # Calculate and draw FPS
+        clock.tick() 
+        fps = clock.get_fps()
+        draw_fps_counter(fps, ui_font, display_width, display_height)
+        
+        pygame.display.flip() # pygame.time.wait(10) removed
     
-    if texture_id: glDeleteTextures(1, [texture_id]) 
+    # Cleanup loaded textures
+    for tex_id in block_texture_ids.values():
+        if tex_id is not None: # Ensure tex_id is valid before deleting
+            glDeleteTextures(1, [tex_id])
+    
     if pygame.font.get_init(): pygame.font.quit() # Quit font module
     pygame.quit()
 
