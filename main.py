@@ -25,9 +25,9 @@ BLOCK_COLORS = {
 }
 
 # World dimensions
-WORLD_WIDTH = 10
-WORLD_HEIGHT = 10 
-WORLD_DEPTH = 10
+WORLD_WIDTH = 30
+WORLD_HEIGHT = 20 
+WORLD_DEPTH = 30
 
 # Player AABB dimensions (width, height, depth)
 PLAYER_AABB_DIMS = (0.6, 1.8, 0.6) 
@@ -90,7 +90,7 @@ def is_block_solid(x, y, z):
         return False 
     return world_data[x][y][z] != BlockType.EMPTY.value
 
-def get_vertex_ao_factor(v_world_x, v_world_y, v_world_z): # This function will be unused temporarily
+def get_vertex_ao_factor(v_world_x, v_world_y, v_world_z): # Calculates AO factor for a vertex
     num_occluders = 0
     for sx_offset in [-0.5, 0.5]:
         for sy_offset in [-0.5, 0.5]:
@@ -226,11 +226,11 @@ def draw_cube_at(pos_x, pos_y, pos_z, current_block_texture_id):
     if current_block_texture_id: glBindTexture(GL_TEXTURE_2D, current_block_texture_id); glEnable(GL_TEXTURE_2D)
     else: glDisable(GL_TEXTURE_2D)
 
-    # --- AO Calculation Start (Temporarily Bypassed) ---
-    # vertex_ao_factors = []
-    # for local_vx, local_vy, local_vz in std_cube_vertices:
-    #     world_vx = pos_x + local_vx; world_vy = pos_y + local_vy; world_vz = pos_z + local_vz
-    #     vertex_ao_factors.append(get_vertex_ao_factor(world_vx, world_vy, world_vz))
+    # --- AO Calculation Start ---
+    vertex_ao_factors = []
+    for local_vx, local_vy, local_vz in std_cube_vertices:
+        world_vx = pos_x + local_vx; world_vy = pos_y + local_vy; world_vz = pos_z + local_vz
+        vertex_ao_factors.append(get_vertex_ao_factor(world_vx, world_vy, world_vz))
     # --- AO Calculation End ---
 
     for face_idx, face_vertex_indices in enumerate(std_cube_faces):
@@ -240,14 +240,14 @@ def draw_cube_at(pos_x, pos_y, pos_z, current_block_texture_id):
         
         glBegin(GL_QUADS)
         for i, vertex_index in enumerate(face_vertex_indices):
-            # --- AO Application Start (Temporarily Bypassed) ---
-            # ao_factor = vertex_ao_factors[vertex_index]
-            # final_brightness = brightness_from_sun * ao_factor
-            # glColor3f(final_brightness, final_brightness, final_brightness)
+            # --- AO Application Start ---
+            ao_factor = vertex_ao_factors[vertex_index]
+            final_brightness = brightness_from_sun * ao_factor
+            glColor3f(final_brightness, final_brightness, final_brightness)
             # --- AO Application End ---
             
-            # Apply Per-Face Lighting Only
-            glColor3f(brightness_from_sun, brightness_from_sun, brightness_from_sun)
+            # Apply Per-Face Lighting Only # This line below should be commented out or removed
+            # glColor3f(brightness_from_sun, brightness_from_sun, brightness_from_sun)
             
             glTexCoord2fv(tex_coords[i])
             glVertex3fv(std_cube_vertices[vertex_index])
@@ -340,7 +340,7 @@ def main():
     player_inventory = { BlockType.DIRT.value: 50, BlockType.STONE.value: 30, BlockType.GRASS.value: 10, BlockType.WOOD.value: 5 }
     hotbar_slots = [BlockType.GRASS, BlockType.DIRT, BlockType.STONE, BlockType.WOOD] 
     current_hotbar_selection_index = 0; current_selected_block_type = hotbar_slots[0].value 
-    ground_level = 3
+    ground_level = WORLD_HEIGHT // 3
     for x in range(WORLD_WIDTH):
         for z in range(WORLD_DEPTH):
             for y in range(ground_level): world_data[x][y][z] = BlockType.DIRT.value
@@ -370,7 +370,7 @@ def main():
             # For now, blocks of this type might not render with texture
 
     glMatrixMode(GL_PROJECTION); gluPerspective(45, (display_width/display_height), 0.1, 100.0); glMatrixMode(GL_MODELVIEW)
-    camera_pos = [WORLD_WIDTH/2.0, ground_level + PLAYER_AABB_DIMS[1]/2.0 + 2.1, WORLD_DEPTH/2.0] 
+    camera_pos = [WORLD_WIDTH/2.0, ground_level + PLAYER_AABB_DIMS[1]/2.0 + 1.0, WORLD_DEPTH/2.0] 
     camera_yaw, camera_pitch = 0.0, -30.0 
     mouse_sensitivity, move_speed = 0.1, 0.1; player_vertical_velocity = 0.0
     pygame.mouse.set_visible(False); pygame.event.set_grab(True)
