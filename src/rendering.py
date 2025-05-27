@@ -178,12 +178,19 @@ def get_frustum_planes():
 
 def is_block_in_frustum(block_world_x, block_world_y, block_world_z, frustum_planes):
     half_extent = 0.5 
-    for plane in frustum_planes:
+    for plane_idx, plane in enumerate(frustum_planes):
+        # Indices: 0:Left, 1:Right, 2:Bottom, 3:Top, 4:Near, 5:Far
+        if plane_idx not in [4, 5]: # Only check Near and Far planes for now
+            continue
+
         nx, ny, nz, d_plane = plane[0], plane[1], plane[2], plane[3]
         r_eff = half_extent * (abs(nx) + abs(ny) + abs(nz))
         dist_center_to_plane = nx * block_world_x + ny * block_world_y + nz * block_world_z + d_plane
+        
         if dist_center_to_plane < -r_eff:
-            return False
+            # Optional: print a message when a block is culled by Near/Far
+            # print(f"Block ({block_world_x},{block_world_y},{block_world_z}) culled by plane {plane_idx}")
+            return False 
     return True
 
 # --- Object Drawing Functions ---

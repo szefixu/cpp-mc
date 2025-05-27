@@ -180,7 +180,7 @@ def main():
                 for z in range(WORLD_DEPTH):
                     block_type_value = world_data[x][y][z]
                     if block_type_value != BlockType.EMPTY.value:
-                        if is_block_in_frustum(x, y, z, frustum_planes): # Frustum culling still useful
+                        if is_block_in_frustum(x, y, z, frustum_planes): # Frustum culling re-enabled
                             current_block_type_enum = BlockType(block_type_value)
                             draw_block_glsl(x, y, z, current_block_type_enum, view_matrix, projection_matrix)
         
