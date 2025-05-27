@@ -2,6 +2,7 @@ import pygame
 from pygame.locals import *
 from OpenGL.GL import *
 from OpenGL.GLU import *
+from OpenGL.GL import glDeleteBuffers, glGetDoublev, glDeleteProgram, glDeleteVertexArrays # For VBO, matrix, shader/VAO cleanup & ops
 import math
 from enum import Enum
 import numpy as np
@@ -9,8 +10,9 @@ from .config import *
 from .block_type import BlockType, BLOCK_COLORS
 # from .assets import std_cube_vertices, std_cube_faces, face_normals, cube_edges, tex_coords # Removed, as these are used by rendering.py
 from .world_management import world_data, is_block_solid, generate_world
-from .rendering import (load_texture, get_frustum_planes, is_block_in_frustum, 
-                        draw_cube_at, draw_wireframe_cube_at, draw_hotbar, draw_fps_counter)
+from .rendering import (load_main_texture_atlas, get_frustum_planes, is_block_in_frustum, 
+                        draw_wireframe_cube_at, draw_hotbar, draw_fps_counter, # draw_cube_at removed
+                        init_generic_cube_vbo, init_rendering_pipeline, draw_block_glsl) # Added VBO/Shader pipeline functions
 
 # Note: std_cube_vertices etc. from assets are used by rendering functions.
 # The 'assets' import is correctly placed within rendering.py.
@@ -82,23 +84,27 @@ def main():
     # This was: ground_level + PLAYER_AABB_DIMS[1]/2.0 + 1.0
     # Let's make it: (WORLD_HEIGHT // 3) + PLAYER_AABB_DIMS[1]/2.0 + 1.0
 
-    block_texture_ids = {}
-    textures_to_load = [
-        (BlockType.GRASS, "textures/grass.png"),
-        (BlockType.DIRT, "textures/dirt.png"),
-        (BlockType.STONE, "textures/stone.png"),
-        (BlockType.WOOD, "textures/wood.png"),
-        (BlockType.LEAVES, "textures/leaves.png")
-    ]
-    for block_type_enum, texture_path in textures_to_load:
-        tex_id = load_texture(texture_path)
-        if tex_id is not None:
-            block_texture_ids[block_type_enum] = tex_id
-        else:
-            print(f"Failed to load texture for {block_type_enum.name} from {texture_path}")
-            # Optionally, assign a default placeholder or handle error
-            # For now, blocks of this type might not render with texture
+    # Load the main texture atlas
+    atlas_id_for_cleanup = load_main_texture_atlas()
+    # The block_texture_ids dictionary and loop for individual textures are removed.
+    # draw_cube_at will now use the global texture_atlas_id from rendering.py
 
+    # Initialize Generic Cube VBO
+    vbo_id_for_cleanup, _ = init_generic_cube_vbo() 
+
+    # Initialize Shader and VAO pipeline
+    shader_program_id_for_cleanup, vao_id_for_cleanup = init_rendering_pipeline()
+    if not shader_program_id_for_cleanup or not vao_id_for_cleanup:
+        print("Failed to initialize rendering pipeline. Exiting.")
+        # Cleanup already initialized resources
+        if atlas_id_for_cleanup: glDeleteTextures(1, [atlas_id_for_cleanup])
+        if vbo_id_for_cleanup: glDeleteBuffers(1, [vbo_id_for_cleanup])
+        # Shader program and VAO might have been partially created, try cleanup if IDs exist
+        if shader_program_id_for_cleanup: glDeleteProgram(shader_program_id_for_cleanup)
+        if vao_id_for_cleanup: glDeleteVertexArrays(1, [vao_id_for_cleanup])
+        pygame.quit()
+        return # Or raise an exception
+    
     glMatrixMode(GL_PROJECTION); gluPerspective(45, (display_width/display_height), 0.1, 100.0); glMatrixMode(GL_MODELVIEW)
     camera_pos = [WORLD_WIDTH/2.0, (WORLD_HEIGHT // 3) + PLAYER_AABB_DIMS[1]/2.0 + 1.0, WORLD_DEPTH/2.0] 
     camera_yaw, camera_pitch = 0.0, -30.0 
@@ -161,20 +167,24 @@ def main():
         glLoadIdentity(); glRotatef(camera_pitch,1,0,0); glRotatef(camera_yaw,0,1,0); glTranslatef(-camera_pos[0],-camera_pos[1],-camera_pos[2])
         
         # Get frustum planes for culling
-        frustum_planes = get_frustum_planes()
+        frustum_planes = get_frustum_planes() # This still uses fixed-function matrix state
         
+        # Get current matrices for shader-based rendering
+        # glGetDoublev returns column-major matrices, which GLSL mat * vec expects. No transpose needed.
+        projection_matrix = np.array(glGetDoublev(GL_PROJECTION_MATRIX), dtype=np.float32)
+        view_matrix = np.array(glGetDoublev(GL_MODELVIEW_MATRIX), dtype=np.float32)
+
         glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT)
         for x in range(WORLD_WIDTH):
             for y in range(WORLD_HEIGHT):
                 for z in range(WORLD_DEPTH):
                     block_type_value = world_data[x][y][z]
                     if block_type_value != BlockType.EMPTY.value:
-                        # Perform frustum culling check before drawing
-                        if is_block_in_frustum(x, y, z, frustum_planes):
+                        if is_block_in_frustum(x, y, z, frustum_planes): # Frustum culling still useful
                             current_block_type_enum = BlockType(block_type_value)
-                            texture_id_for_block = block_texture_ids.get(current_block_type_enum)
-                            # Call draw_cube_at with the specific texture ID
-                            draw_cube_at(x, y, z, texture_id_for_block)
+                            draw_block_glsl(x, y, z, current_block_type_enum, view_matrix, projection_matrix)
+        
+        # Old wireframe and UI still use immediate mode logic for now
         if targeted_block_info and targeted_block_info[0]: draw_wireframe_cube_at(*targeted_block_info[0])
         draw_hotbar(display_width,display_height,ui_font,hotbar_slots,player_inventory,current_hotbar_selection_index)
         
@@ -186,10 +196,19 @@ def main():
         pygame.display.flip() # pygame.time.wait(10) removed
     
     # Cleanup loaded textures
-    for tex_id in block_texture_ids.values():
-        if tex_id is not None: # Ensure tex_id is valid before deleting
-            glDeleteTextures(1, [tex_id])
+    if atlas_id_for_cleanup:
+        glDeleteTextures(1, [atlas_id_for_cleanup])
     
+    # Cleanup VBO
+    if vbo_id_for_cleanup:
+        glDeleteBuffers(1, [vbo_id_for_cleanup])
+    
+    # Cleanup Shader Program and VAO
+    if shader_program_id_for_cleanup:
+        glDeleteProgram(shader_program_id_for_cleanup)
+    if vao_id_for_cleanup:
+        glDeleteVertexArrays(1, [vao_id_for_cleanup])
+
     if pygame.font.get_init(): pygame.font.quit() # Quit font module
     pygame.quit()
 
