@@ -73,7 +73,7 @@ face_normals = [
 
 # Wireframe cube edges
 cube_edges = (
-    (0,1), (1,2), (2,3), (3,0), (4,5), (5,6), (6,7), (7,4), # Corrected: (5,6), (6,7), (7,4) instead of (5,7), (7,6), (6,4)
+    (0,1), (1,2), (2,3), (3,0), (4,5), (5,6), (6,7), (7,4), 
     (0,4), (1,5), (2,6), (3,7)
 )
 
@@ -89,7 +89,7 @@ def is_block_solid(x, y, z):
         return False 
     return world_data[x][y][z] != BlockType.EMPTY.value
 
-def get_vertex_ao_factor(v_world_x, v_world_y, v_world_z):
+def get_vertex_ao_factor(v_world_x, v_world_y, v_world_z): # This function will be unused temporarily
     num_occluders = 0
     for sx_offset in [-0.5, 0.5]:
         for sy_offset in [-0.5, 0.5]:
@@ -168,10 +168,12 @@ def draw_cube_at(pos_x, pos_y, pos_z, texture_id_to_apply):
     if texture_id_to_apply: glBindTexture(GL_TEXTURE_2D, texture_id_to_apply); glEnable(GL_TEXTURE_2D)
     else: glDisable(GL_TEXTURE_2D)
 
-    vertex_ao_factors = []
-    for local_vx, local_vy, local_vz in std_cube_vertices:
-        world_vx = pos_x + local_vx; world_vy = pos_y + local_vy; world_vz = pos_z + local_vz
-        vertex_ao_factors.append(get_vertex_ao_factor(world_vx, world_vy, world_vz))
+    # --- AO Calculation Start (Temporarily Bypassed) ---
+    # vertex_ao_factors = []
+    # for local_vx, local_vy, local_vz in std_cube_vertices:
+    #     world_vx = pos_x + local_vx; world_vy = pos_y + local_vy; world_vz = pos_z + local_vz
+    #     vertex_ao_factors.append(get_vertex_ao_factor(world_vx, world_vy, world_vz))
+    # --- AO Calculation End ---
 
     for face_idx, face_vertex_indices in enumerate(std_cube_faces):
         face_normal = face_normals[face_idx]
@@ -180,9 +182,15 @@ def draw_cube_at(pos_x, pos_y, pos_z, texture_id_to_apply):
         
         glBegin(GL_QUADS)
         for i, vertex_index in enumerate(face_vertex_indices):
-            ao_factor = vertex_ao_factors[vertex_index]
-            final_brightness = brightness_from_sun * ao_factor
-            glColor3f(final_brightness, final_brightness, final_brightness)
+            # --- AO Application Start (Temporarily Bypassed) ---
+            # ao_factor = vertex_ao_factors[vertex_index]
+            # final_brightness = brightness_from_sun * ao_factor
+            # glColor3f(final_brightness, final_brightness, final_brightness)
+            # --- AO Application End ---
+            
+            # Apply Per-Face Lighting Only
+            glColor3f(brightness_from_sun, brightness_from_sun, brightness_from_sun)
+            
             glTexCoord2fv(tex_coords[i])
             glVertex3fv(std_cube_vertices[vertex_index])
         glEnd()
@@ -230,7 +238,7 @@ def main():
     ui_font = pygame.font.Font(None, 24) 
     display_width, display_height = 800, 600
     pygame.display.set_mode((display_width, display_height), DOUBLEBUF | OPENGL)
-    pygame.display.set_caption("Voxel Engine - Directional Light")
+    pygame.display.set_caption("Voxel Engine - Mouse Look Review") 
     glClearColor(0.5,0.7,1.0,1.0); glEnable(GL_DEPTH_TEST); glEnable(GL_CULL_FACE); glCullFace(GL_BACK); glShadeModel(GL_SMOOTH)
 
     player_inventory = { BlockType.DIRT.value: 50, BlockType.STONE.value: 30, BlockType.GRASS.value: 10, BlockType.WOOD.value: 5 }
@@ -261,8 +269,11 @@ def main():
         for event in pygame.event.get():
             if event.type == pygame.QUIT: running = False
             if event.type == pygame.MOUSEMOTION:
-                dx,dy=event.rel; camera_yaw+=dx*mouse_sensitivity; camera_pitch-=dy*mouse_sensitivity
-                camera_pitch = max(-90, min(90, camera_pitch))
+                dx,dy=event.rel
+                camera_yaw += dx * mouse_sensitivity
+                camera_yaw %= 360.0 # Wrap yaw
+                camera_pitch -= dy * mouse_sensitivity
+                camera_pitch = max(-90.0, min(90.0, camera_pitch)) # Clamp pitch
             if event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE: running = False
                 if event.key in keys_pressed: keys_pressed[event.key] = True
@@ -316,6 +327,7 @@ def main():
         pygame.display.flip(); pygame.time.wait(10)
     
     if texture_id: glDeleteTextures(1, [texture_id]) 
+    if pygame.font.get_init(): pygame.font.quit() # Quit font module
     pygame.quit()
 
 if __name__ == "__main__":
