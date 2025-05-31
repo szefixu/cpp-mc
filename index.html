@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Minecraft Clone - JS</title>
+    <style>
+        body { margin: 0; overflow: hidden; }
+        canvas { display: block; }
+        #blocker {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.5);
+        }
+        #instructions {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            font-size: 14px;
+            cursor: pointer;
+            color: white;
+        }
+    </style>
+    <!-- Ensure Three.js is included before PointerLockControls if not using modules for Three itself -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+    <div id="blocker">
+        <div id="instructions">
+            <p style="font-size:36px">Click to play</p>
+            <p>Move: WASD<br/>Jump: SPACE<br/>Look: MOUSE</p>
+        </div>
+    </div>
+    <!-- main.js is a module and will import PointerLockControls.js -->
+    <script type="module" src="main.js"></script>
+</body>
+</html>
