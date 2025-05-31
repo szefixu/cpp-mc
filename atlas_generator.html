@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simple Texture Atlas Generator</title>
+    <style>
+        body { font-family: sans-serif; margin: 20px; background-color: #f4f4f4; color: #333; }
+        #controls { margin-bottom: 20px; padding: 10px; background-color: #fff; border-radius: 5px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        canvas { border: 1px solid #ccc; margin-top: 10px; image-rendering: pixelated; /* Keep pixels sharp */ width: 64px; /* Displayed larger for visibility */ height: 320px; }
+        button { padding: 10px 15px; font-size: 16px; color: #fff; background-color: #007bff; border: none; border-radius: 5px; cursor: pointer; transition: background-color 0.3s ease; }
+        button:hover { background-color: #0056b3; }
+        #download-link-container { margin-top: 15px; }
+        #download-link { font-weight: bold; color: #007bff; }
+        .instructions { margin-top: 20px; padding: 10px; background-color: #e9ecef; border-left: 3px solid #007bff; }
+    </style>
+</head>
+<body>
+
+    <h1>Simple Texture Atlas Generator</h1>
+    <p>This page generates a basic 16x80 pixel texture atlas with 5 predefined block colors.</p>
+
+    <div id="controls">
+        <button id="generateButton">Generate Atlas</button>
+    </div>
+
+    <canvas id="atlasCanvas"></canvas>
+
+    <div id="download-link-container">
+        <p>After generating, right-click the image above (the colored strip) and "Save Image As..." to save it.</p>
+        <p>Alternatively, a download link will appear here: <a id="download-link" href="#" download="atlas.png"></a></p>
+    </div>
+
+    <div class="instructions">
+        <strong>Instructions for game integration:</strong>
+        <ol>
+            <li>Click the "Generate Atlas" button.</li>
+            <li>The generated atlas (a colored vertical strip) will appear above.</li>
+            <li>Right-click the colored image (the canvas where the strip is drawn) and select "Save Image As...".</li>
+            <li>Name the file exactly <strong><code>atlas.png</code></strong>.</li>
+            <li>Save it into the <strong><code>textures</code></strong> folder of your Minecraft clone project.</li>
+        </ol>
+    </div>
+
+    <script>
+        document.getElementById('generateButton').addEventListener('click', function() {
+            const canvas = document.getElementById('atlasCanvas');
+            const textureSize = 16; // Each block texture is 16x16
+            const numTextures = 5;  // Grass, Dirt, Stone, Wood, Leaves
+
+            canvas.width = textureSize;
+            canvas.height = textureSize * numTextures; // 16x80
+
+            const ctx = canvas.getContext('2d');
+
+            if (!ctx) {
+                alert("Failed to get canvas context. Your browser might not support it.");
+                return;
+            }
+
+            // Clear canvas for re-generation
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            const colors = [
+                { name: 'GRASS', color: 'green' },
+                { name: 'DIRT', color: 'brown' },
+                { name: 'STONE', color: 'gray' },
+                { name: 'WOOD', color: 'saddlebrown' },
+                { name: 'LEAVES', color: 'darkgreen' }
+            ];
+
+            colors.forEach((item, index) => {
+                ctx.fillStyle = item.color;
+                ctx.fillRect(0, index * textureSize, textureSize, textureSize);
+                // console.log(`Drew ${item.name} (${item.color}) at y=${index * textureSize}`);
+            });
+
+            // Make the download link work
+            try {
+                const dataURL = canvas.toDataURL('image/png');
+                const downloadLink = document.getElementById('download-link');
+                downloadLink.href = dataURL;
+                downloadLink.textContent = 'Download atlas.png'; // Make link visible and descriptive
+
+                console.log('Atlas generated. Data URL:', dataURL);
+                alert('Atlas generated! Right-click the colored image above (or the download link that appeared) to save it as "atlas.png" into your "textures" folder.');
+            } catch (e) {
+                console.error("Error generating data URL or updating link:", e);
+                alert("Error generating atlas. Your browser might not support canvas.toDataURL, or it might be an issue with security settings (e.g., if viewing the HTML locally with certain restrictions). Try a different browser or check console for errors.");
+            }
+        });
+
+        // Optional: trigger generation on load for immediate view, though button is better for clarity
+        // document.addEventListener('DOMContentLoaded', () => {
+        //    document.getElementById('generateButton').click();
+        // });
+    </script>
+
+</body>
+</html>
