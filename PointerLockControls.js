@@ -1,9 +1,17 @@
-// PointerLockControls.js (content from Three.js examples)
-import {
-	Euler,
-	EventDispatcher,
-	Vector3
-} from 'three';
+// Ensure THREE is loaded globally, e.g., via CDN script in HTML
+if (typeof THREE === 'undefined') {
+    console.error('PointerLockControls: THREE global object not found. Make sure Three.js is loaded before this script.');
+    // Optional: throw an error or return to prevent further execution
+    throw new Error('PointerLockControls requires THREE.js to be loaded globally.');
+}
+const { Euler, EventDispatcher, Vector3 } = THREE;
+
+// Original PointerLockControls.js content (excluding the removed import) starts here
+// import { // This line is removed
+// 	Euler,
+// 	EventDispatcher,
+// 	Vector3
+// } from 'three'; // This line is removed
 
 const _euler = new Euler( 0, 0, 0, 'YXZ' );
 const _vector = new Vector3();

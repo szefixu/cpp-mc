@@ -25,18 +25,76 @@
             cursor: pointer;
             color: white;
         }
+        /* Hotbar Styles */
+        #hotbar-container {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            background-color: rgba(0, 0, 0, 0.5);
+            padding: 5px;
+            border-radius: 3px;
+            z-index: 100;
+        }
+        .hotbar-slot {
+            width: 50px;
+            height: 50px;
+            border: 2px solid #555;
+            margin: 2px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            font-family: monospace;
+            font-size: 10px;
+            background-color: rgba(255, 255, 255, 0.1);
+            user-select: none;
+        }
+        .hotbar-slot.selected {
+            border-color: #FFF;
+            background-color: rgba(255, 255, 255, 0.3);
+        }
+        .slot-name {
+            font-size: 12px;
+            margin-bottom: 3px;
+        }
+        .slot-quantity {
+            font-size: 10px;
+        }
+        /* FPS Counter Styles */
+        #fps-counter {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: white;
+            background-color: rgba(0, 0, 0, 0.5);
+            padding: 5px 8px;
+            border-radius: 3px;
+            font-family: monospace;
+            font-size: 14px;
+            z-index: 101;
+        }
     </style>
-    <!-- Ensure Three.js is included before PointerLockControls if not using modules for Three itself -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 </head>
 <body>
+    <div id="fps-counter">FPS: --</div>
     <div id="blocker">
         <div id="instructions">
             <p style="font-size:36px">Click to play</p>
-            <p>Move: WASD<br/>Jump: SPACE<br/>Look: MOUSE</p>
+            <p>Move: WASD<br/>Jump: SPACE<br/>Look: MOUSE<br/>Break: Left Click<br/>Place: Right Click<br/>Hotbar: 1-4</p>
         </div>
     </div>
-    <!-- main.js is a module and will import PointerLockControls.js -->
+
+    <div id="hotbar-container">
+        <div class="hotbar-slot" id="slot-0">S0: -- (0)</div>
+        <div class="hotbar-slot" id="slot-1">S1: -- (0)</div>
+        <div class="hotbar-slot" id="slot-2">S2: -- (0)</div>
+        <div class="hotbar-slot" id="slot-3">S3: -- (0)</div>
+    </div>
+
     <script type="module" src="main.js"></script>
 </body>
 </html>
